@@ -4,6 +4,8 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -17,6 +19,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.GridLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -25,6 +28,7 @@ import android.widget.ImageView;
 import com.mmmd.maher.androidmultimediademo.R;
 import com.mmmd.maher.androidmultimediademo.model.ImageStuff;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 
 /**
@@ -266,7 +270,7 @@ public class MediaActivity extends AppCompatActivity {
             holder.itemView.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
-                    selectedImage.setImageDrawable(vHolder.image.getDrawable());
+                    selectedImage.setImageDrawable(vHolder.imageView.getDrawable());
                 }
             });
         }
@@ -278,21 +282,73 @@ public class MediaActivity extends AppCompatActivity {
 
         @Override
         public ImageViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-            return null;
+            View card = LayoutInflater.from(parent.getContext()).inflate(R.layout.card_image, parent, false);
+            return new ImageViewHolder(card);
         }
     }
 
     public class ImageViewHolder extends RecyclerView.ViewHolder {
 
-        private ImageView image;
+        private ImageView imageView;
 
         public ImageViewHolder(View itemView) {
             super(itemView);
-            image = (ImageView)itemView.findViewById(R.id.image_thumb);
+            imageView = (ImageView)itemView.findViewById(R.id.image_thumb);
         }
 
         public void updateUI(ImageStuff image) {
-            // convert and grab img from url
+
+            DecodeBitmap task = new DecodeBitmap(imageView, image);
+            task.execute();
         }
+    }
+
+    class DecodeBitmap extends AsyncTask<Void, Void, Bitmap> {
+        private final WeakReference<ImageView> mImageViewWeakReference;
+        private ImageStuff image;
+
+        public DecodeBitmap(ImageView imageView, ImageStuff image) {
+            this.mImageViewWeakReference = new WeakReference<ImageView>(imageView);
+            this.image = image;
+        }
+
+        @Override
+        protected Bitmap doInBackground(Void... voids) {
+            return decodeURI(image.getImageResourceUrl().getPath());
+        }
+
+        @Override
+        protected void onPostExecute(Bitmap bitmap) {
+            super.onPostExecute(bitmap);
+
+            final ImageView img = mImageViewWeakReference.get();
+
+            if (img != null) {
+                img.setImageBitmap(bitmap);
+            }
+        }
+    }
+
+    public Bitmap decodeURI(String filePath) {
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(filePath, options);
+
+        // Reduce image file size
+
+        Boolean scaleByHeight = Math.abs(options.outHeight - 199) >= Math.abs(options.outWidth - 100);
+        if (options.outHeight * options.outWidth * 2 >= 16384) {
+            double sampleSize = scaleByHeight
+                    ? options.outHeight / 1000
+                    : options.outWidth / 1000;
+            options.inSampleSize = (int)Math.pow(2d, Math.floor(Math.log(sampleSize)/Math.log(2d)));
+        }
+
+        options.inJustDecodeBounds = false;
+        options.inTempStorage = new byte[512];
+
+        Bitmap output = BitmapFactory.decodeFile(filePath, options);
+
+        return output;
     }
 }
