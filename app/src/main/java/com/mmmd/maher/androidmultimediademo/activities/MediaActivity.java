@@ -1,14 +1,31 @@
 package com.mmmd.maher.androidmultimediademo.activities;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
-import android.support.v7.app.ActionBar;
-import android.support.v7.app.AppCompatActivity;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
+import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
+import android.provider.MediaStore;
+import android.support.annotation.NonNull;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
+import android.support.v7.app.ActionBar;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.GridLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
 
 import com.mmmd.maher.androidmultimediademo.R;
+import com.mmmd.maher.androidmultimediademo.model.ImageStuff;
+
+import java.util.ArrayList;
 
 /**
  * An example full-screen activity that shows and hides the system UI (i.e.
@@ -85,6 +102,10 @@ public class MediaActivity extends AppCompatActivity {
         }
     };
 
+    final int PERMISSION_READ_EXTERNAL = 111;
+    private ArrayList<ImageStuff> images = new ArrayList<>();
+    private ImageView selectedImage;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -100,14 +121,78 @@ public class MediaActivity extends AppCompatActivity {
         mContentView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+
                 toggle();
             }
         });
+
+        selectedImage = (ImageView)findViewById(R.id.selected_image);
+
+        RecyclerView recyclerView = (RecyclerView)findViewById(R.id.content_images);
+        ImagesAdapter adapter = new ImagesAdapter(images);
+
+        recyclerView.setAdapter(adapter);
+
+        GridLayoutManager layoutManager = new GridLayoutManager(getBaseContext(), 4);
+        layoutManager.setOrientation(GridLayoutManager.VERTICAL);
+
+        recyclerView.setLayoutManager(layoutManager);
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSION_READ_EXTERNAL);
+        } else {
+            retrieveAndSetImages();
+        }
 
         // Upon interacting with UI controls, delay any scheduled hide()
         // operations to prevent the jarring behavior of controls going away
         // while interacting with the UI.
         findViewById(R.id.dummy_button).setOnTouchListener(mDelayHideTouchListener);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        switch (requestCode) {
+            case PERMISSION_READ_EXTERNAL: {
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    retrieveAndSetImages();
+                }
+            }
+        }
+    }
+
+    public void retrieveAndSetImages() {
+
+        // Load in background
+
+        AsyncTask.execute(new Runnable() {
+            @Override
+            public void run() {
+                images.clear();
+
+                Cursor cursor = getContentResolver().query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, null, null, null, null);
+
+                if (cursor != null) {
+                    cursor.moveToFirst();
+
+                    for (int x = 0; x < cursor.getCount(); x++) {
+                        cursor.moveToPosition(x);
+                        Log.v("MOOSE", "URL: " + cursor.getString(1));
+                        ImageStuff img = new ImageStuff(Uri.parse(cursor.getString(1))); // 1 is path to file
+                        images.add(img);
+                    }
+                }
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        // set images on recyclerview adapter + update images
+                    }
+                });
+            }
+        });
     }
 
     @Override
@@ -161,5 +246,53 @@ public class MediaActivity extends AppCompatActivity {
     private void delayedHide(int delayMillis) {
         mHideHandler.removeCallbacks(mHideRunnable);
         mHideHandler.postDelayed(mHideRunnable, delayMillis);
+    }
+
+    public class ImagesAdapter extends RecyclerView.Adapter<ImageViewHolder> {
+
+        private ArrayList<ImageStuff> images;
+
+        public ImagesAdapter(ArrayList<ImageStuff> images) {
+            this.images = images;
+        }
+
+        @Override
+        public void onBindViewHolder(ImageViewHolder holder, int position) {
+            final ImageStuff image = images.get(position);
+            holder.updateUI(image);
+
+            final ImageViewHolder vHolder = holder;
+
+            holder.itemView.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    selectedImage.setImageDrawable(vHolder.image.getDrawable());
+                }
+            });
+        }
+
+        @Override
+        public int getItemCount() {
+            return images.size();
+        }
+
+        @Override
+        public ImageViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            return null;
+        }
+    }
+
+    public class ImageViewHolder extends RecyclerView.ViewHolder {
+
+        private ImageView image;
+
+        public ImageViewHolder(View itemView) {
+            super(itemView);
+            image = (ImageView)itemView.findViewById(R.id.image_thumb);
+        }
+
+        public void updateUI(ImageStuff image) {
+            // convert and grab img from url
+        }
     }
 }
